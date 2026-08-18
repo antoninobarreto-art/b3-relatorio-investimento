@@ -10,7 +10,7 @@ import streamlit as st
 import database_etl
 
 DB_NAME = "b3_investimentos.db"
-APP_VERSION = "v1.2.0"
+APP_VERSION = "v1.2.1"
 
 def get_git_commit_hash():
     try:
@@ -28,7 +28,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom Styling
+# Custom Styling (Compatible with Light and Dark Modes)
 st.markdown("""
 <style>
     /* Metric Cards */
@@ -36,53 +36,38 @@ st.markdown("""
         background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
         border: 1px solid #334155;
         border-radius: 12px;
-        padding: 20px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        padding: 18px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.15);
         text-align: center;
         margin-bottom: 15px;
     }
     .metric-label {
-        font-size: 0.9rem;
+        font-size: 0.85rem;
         color: #94a3b8;
-        font-weight: 600;
+        font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.05em;
     }
     .metric-value {
-        font-size: 1.8rem;
-        font-weight: 700;
-        color: #f8fafc;
-        margin-top: 5px;
+        font-size: 1.7rem;
+        font-weight: 800;
+        color: #ffffff;
+        margin-top: 6px;
     }
     .metric-delta-pos {
-        color: #10b981;
-        font-weight: 600;
-        font-size: 1rem;
+        color: #10b981 !important;
+        font-weight: 800;
+        font-size: 1.6rem;
     }
     .metric-delta-neg {
-        color: #ef4444;
-        font-weight: 600;
-        font-size: 1rem;
+        color: #ef4444 !important;
+        font-weight: 800;
+        font-size: 1.6rem;
     }
     
-    /* Headers & Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        white-space: pre-wrap;
-        background-color: #0f172a;
-        border-radius: 8px 8px 0 0;
-        gap: 1px;
-        padding-top: 10px;
-        padding-bottom: 10px;
-        padding-left: 20px;
-        padding-right: 20px;
-        font-weight: 600;
-    }
+    /* Version Badge */
     .version-badge {
-        background-color: #1e293b;
+        background-color: #0f172a;
         color: #38bdf8;
         padding: 4px 8px;
         border-radius: 6px;
@@ -93,34 +78,30 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Database Helper Functions
+# Database Helper Functions (Fresh Querying)
 def get_db_connection():
     if not os.path.exists(DB_NAME):
         database_etl.process_and_load_data()
     return sqlite3.connect(DB_NAME)
 
-@st.cache_data(ttl=60)
 def load_versions():
     conn = get_db_connection()
     df = pd.read_sql("SELECT * FROM versoes_dados ORDER BY id DESC", conn)
     conn.close()
     return df
 
-@st.cache_data(ttl=60)
 def load_ativos(versao_id):
     conn = get_db_connection()
     df = pd.read_sql("SELECT * FROM ativos WHERE versao_id = ?", conn, params=(versao_id,))
     conn.close()
     return df
 
-@st.cache_data(ttl=60)
 def load_rendimentos(versao_id):
     conn = get_db_connection()
     df = pd.read_sql("SELECT * FROM rendimentos WHERE versao_id = ?", conn, params=(versao_id,))
     conn.close()
     return df
 
-@st.cache_data(ttl=60)
 def load_transacoes(versao_id):
     conn = get_db_connection()
     df = pd.read_sql("SELECT * FROM transacoes WHERE versao_id = ?", conn, params=(versao_id,))
@@ -139,15 +120,24 @@ st.sidebar.markdown(f"**Versão do Sistema:** <span class='version-badge'>{APP_V
 st.sidebar.markdown("---")
 
 df_versions = load_versions()
-selected_version_id = 1
+
 if not df_versions.empty:
-    selected_version_id = df_versions.iloc[0]['id']
+    version_options = {
+        row['id']: f"Versão #{row['id']} ({row['data_importacao']})" 
+        for _, row in df_versions.iterrows()
+    }
+    selected_version_id = st.sidebar.selectbox(
+        "📌 Versão dos Dados:",
+        options=list(version_options.keys()),
+        format_func=lambda x: version_options[x]
+    )
+else:
+    selected_version_id = 1
 
 # Re-run ETL button
 if st.sidebar.button("🔄 Atualizar Cotações / Re-importar ETL", use_container_width=True):
     with st.spinner("Re-importando dados e atualizando cotações via yfinance..."):
         database_etl.process_and_load_data()
-        st.cache_data.clear()
         st.sidebar.success("Cotações atualizadas com sucesso!")
         st.rerun()
 
@@ -265,7 +255,7 @@ with tab1:
     with col_f1:
         search_ticker = st.text_input("🔍 Pesquisar Ativo (Ticker ou Nome):", "").strip().upper()
     with col_f2:
-        tipos_disponiveis = ["Todos"] + sorted(df_ativos['tipo_ativo'].unique().tolist())
+        tipos_disponiveis = ["Todos"] + sorted(df_ativos['tipo_ativo'].unique().tolist()) if not df_ativos.empty else ["Todos"]
         selected_tipo = st.selectbox("🏷️ Filtrar por Classe de Ativo:", tipos_disponiveis)
 
     # Filter Dataframe
@@ -328,7 +318,6 @@ with tab1:
             barmode='group',
             xaxis_title="Ativo (Ticker)",
             yaxis_title="Preço em R$",
-            template="plotly_dark",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             margin=dict(l=20, r=20, t=50, b=20)
         )
@@ -389,7 +378,6 @@ with tab2:
                 yaxis=dict(autorange="reversed"),
                 xaxis_title="Rentabilidade (%)",
                 yaxis_title="Ativo",
-                template="plotly_dark",
                 coloraxis_showscale=False
             )
             st.plotly_chart(fig_best, use_container_width=True)
@@ -449,7 +437,6 @@ with tab3:
                 yaxis=dict(autorange="reversed"),
                 xaxis_title="Rentabilidade (%)",
                 yaxis_title="Ativo",
-                template="plotly_dark",
                 coloraxis_showscale=False
             )
             st.plotly_chart(fig_worst, use_container_width=True)
@@ -485,7 +472,6 @@ with tab4:
                 hole=0.4,
                 title="Top 8 Pagadores de Rendimentos"
             )
-            fig_pie_rend.update_layout(template="plotly_dark")
             st.plotly_chart(fig_pie_rend, use_container_width=True)
 
         st.markdown("---")
