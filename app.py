@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import io
+import subprocess
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -9,6 +10,15 @@ import streamlit as st
 import database_etl
 
 DB_NAME = "b3_investimentos.db"
+APP_VERSION = "v1.2.0"
+
+def get_git_commit_hash():
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode("utf-8").strip()
+    except Exception:
+        return "main"
+
+GIT_COMMIT = get_git_commit_hash()
 
 # Streamlit Page Setup
 st.set_page_config(
@@ -71,6 +81,15 @@ st.markdown("""
         padding-right: 20px;
         font-weight: 600;
     }
+    .version-badge {
+        background-color: #1e293b;
+        color: #38bdf8;
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-weight: bold;
+        border: 1px solid #334155;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -116,6 +135,7 @@ if not os.path.exists(DB_NAME):
 # Sidebar Navigation & Controls
 st.sidebar.image("https://img.icons8.com/color/96/bullish.png", width=70)
 st.sidebar.title("B3 Investimentos")
+st.sidebar.markdown(f"**Versão do Sistema:** <span class='version-badge'>{APP_VERSION}</span> `#{GIT_COMMIT}`", unsafe_allow_html=True)
 st.sidebar.markdown("---")
 
 df_versions = load_versions()
@@ -166,7 +186,7 @@ if not df_ativos.empty:
     )
 
 st.sidebar.markdown("---")
-st.sidebar.caption("💡 **Dashboard de Investimentos B3**\nPython | Pandas | SQLite | Streamlit")
+st.sidebar.caption(f"💡 **Dashboard B3 {APP_VERSION}** (`git #{GIT_COMMIT}`)\nPython | Pandas | SQLite | Streamlit")
 
 # Main Title & Header
 st.title("📈 Dashboard Interativo Financeiro B3")
