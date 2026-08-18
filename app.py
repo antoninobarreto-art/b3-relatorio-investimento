@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import io
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -118,41 +119,57 @@ st.sidebar.title("B3 Investimentos")
 st.sidebar.markdown("---")
 
 df_versions = load_versions()
+selected_version_id = 1
 if not df_versions.empty:
-    version_options = {
-        row['id']: f"Versão #{row['id']} ({row['data_importacao']})" 
-        for _, row in df_versions.iterrows()
-    }
-    selected_version_id = st.sidebar.selectbox(
-        "📌 Versão da Carteira (Versionamento):",
-        options=list(version_options.keys()),
-        format_func=lambda x: version_options[x]
-    )
-else:
-    st.sidebar.warning("Nenhuma versão encontrada.")
-    selected_version_id = 1
-
-st.sidebar.markdown("---")
+    selected_version_id = df_versions.iloc[0]['id']
 
 # Re-run ETL button
 if st.sidebar.button("🔄 Atualizar Cotações / Re-importar ETL", use_container_width=True):
     with st.spinner("Re-importando dados e atualizando cotações via yfinance..."):
         database_etl.process_and_load_data()
         st.cache_data.clear()
-        st.sidebar.success("Cotações e versão atualizadas com sucesso!")
+        st.sidebar.success("Cotações atualizadas com sucesso!")
         st.rerun()
 
 st.sidebar.markdown("---")
-st.sidebar.caption("💡 **Dashboard de Investimentos B3**\nPython | Pandas | SQLite | Streamlit")
 
 # Fetch Data for Selected Version
 df_ativos = load_ativos(selected_version_id)
 df_rendimentos = load_rendimentos(selected_version_id)
 df_transacoes = load_transacoes(selected_version_id)
 
+# Export Buttons in Sidebar
+st.sidebar.subheader("📥 Exportar Carteira")
+if not df_ativos.empty:
+    csv_data = df_ativos.to_csv(index=False).encode('utf-8')
+    st.sidebar.download_button(
+        label="📄 Exportar CSV",
+        data=csv_data,
+        file_name=f"relatorio_b3_carteira.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+
+    excel_buffer = io.BytesIO()
+    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+        df_ativos.to_excel(writer, sheet_name='Ativos', index=False)
+        df_rendimentos.to_excel(writer, sheet_name='Rendimentos', index=False)
+        df_transacoes.to_excel(writer, sheet_name='Transações', index=False)
+    excel_data = excel_buffer.getvalue()
+
+    st.sidebar.download_button(
+        label="📊 Exportar Excel (.xlsx)",
+        data=excel_data,
+        file_name=f"carteira_b3.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
+
+st.sidebar.markdown("---")
+st.sidebar.caption("💡 **Dashboard de Investimentos B3**\nPython | Pandas | SQLite | Streamlit")
+
 # Main Title & Header
 st.title("📈 Dashboard Interativo Financeiro B3")
-st.caption(f"Visualizando dados da Versão #{selected_version_id} | SQLite Data Source")
 
 # Top KPI Summary Cards
 if not df_ativos.empty:
@@ -210,13 +227,12 @@ if not df_ativos.empty:
 
 st.markdown("---")
 
-# Main Navigation Tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+# Main Navigation Tabs (4 Tabs)
+tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Preço Médio vs. Cotação Atual",
     "🚀 Top 5 Melhores Ativos",
     "📉 Top 5 Piores Ativos",
-    "💰 Rendimentos & Provendos",
-    "📜 Versionamento & Gestão"
+    "💰 Rendimentos & Provendos"
 ])
 
 # ==========================================
@@ -470,48 +486,3 @@ with tab4:
         )
     else:
         st.info("Nenhum rendimento registrado nesta versão.")
-
-
-# ==========================================
-# TAB 5: VERSIONAMENTO & GESTÃO DE DADOS
-# ==========================================
-with tab5:
-    st.header("📜 Histórico de Versionamento no SQLite")
-    st.caption("Controle de auditoria e versões salvas no banco de dados SQLite.")
-
-    st.dataframe(
-        df_versions.style.format({'id': '#{}'}),
-        use_container_width=True
-    )
-
-    st.markdown("---")
-    st.subheader("📥 Exportação de Dados da Carteira")
-    
-    col_exp1, col_exp2 = st.columns(2)
-    with col_exp1:
-        csv_data = df_ativos.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📄 Baixar Relatório Completo (CSV)",
-            data=csv_data,
-            file_name=f"relatorio_b3_versao_{selected_version_id}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-
-    with col_exp2:
-        # Generate Excel buffer
-        import io
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            df_ativos.to_excel(writer, sheet_name='Ativos', index=False)
-            df_rendimentos.to_excel(writer, sheet_name='Rendimentos', index=False)
-            df_transacoes.to_excel(writer, sheet_name='Transações', index=False)
-        excel_data = excel_buffer.getvalue()
-
-        st.download_button(
-            label="📊 Baixar Carteira Completa (Excel .xlsx)",
-            data=excel_data,
-            file_name=f"carteira_b3_versao_{selected_version_id}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
